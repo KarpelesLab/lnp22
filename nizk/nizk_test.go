@@ -8,12 +8,11 @@ import (
 	"github.com/KarpelesLab/lnp22/sampler"
 )
 
-// makeValidInstance generates a random statement and matching witness.
-// A is sampled uniformly, s is ternary (||s||_∞ = 1), t = A·s.
 func makeValidInstance(params *Params) (*Statement, *Witness) {
-	A := sampler.SampleUniformMat(params.K, params.L, rand.Reader)
-	s := sampler.SampleTernaryVec(params.L, rand.Reader)
-	t := ring.MatVecMul(A, s)
+	r := params.Ring
+	A := sampler.SampleUniformMat(r, params.K, params.L, rand.Reader)
+	s := sampler.SampleTernaryVec(r, params.L, rand.Reader)
+	t := r.MatVecMul(A, s)
 	return &Statement{A: A, T: t}, &Witness{S: s}
 }
 
@@ -22,12 +21,10 @@ func makeValidInstance(params *Params) (*Statement, *Witness) {
 func TestLinearProveVerify(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
 	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
 	if err != nil {
 		t.Fatalf("ProveLinear failed: %v", err)
 	}
-
 	if !VerifyLinear(params, stmt, proof) {
 		t.Fatal("VerifyLinear returned false for valid proof")
 	}
@@ -50,14 +47,11 @@ func TestLinearProveVerifyMultiple(t *testing.T) {
 func TestLinearRejectTamperedZ(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
 	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
 	if err != nil {
-		t.Fatalf("ProveLinear failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Tamper with z
-	proof.Z[0][0] = (proof.Z[0][0] + 1) % ring.Q
+	proof.Z[0][0] = (proof.Z[0][0] + 1) % params.Ring.Q
 	if VerifyLinear(params, stmt, proof) {
 		t.Fatal("VerifyLinear should reject tampered z")
 	}
@@ -66,14 +60,11 @@ func TestLinearRejectTamperedZ(t *testing.T) {
 func TestLinearRejectTamperedW(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
 	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
 	if err != nil {
-		t.Fatalf("ProveLinear failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Tamper with w — this changes the derived challenge
-	proof.W[0][0] = (proof.W[0][0] + 1) % ring.Q
+	proof.W[0][0] = (proof.W[0][0] + 1) % params.Ring.Q
 	if VerifyLinear(params, stmt, proof) {
 		t.Fatal("VerifyLinear should reject tampered w")
 	}
@@ -82,14 +73,11 @@ func TestLinearRejectTamperedW(t *testing.T) {
 func TestLinearRejectTamperedStatement(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
 	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
 	if err != nil {
-		t.Fatalf("ProveLinear failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Tamper with the statement (change t)
-	stmt.T[0][0] = (stmt.T[0][0] + 1) % ring.Q
+	stmt.T[0][0] = (stmt.T[0][0] + 1) % params.Ring.Q
 	if VerifyLinear(params, stmt, proof) {
 		t.Fatal("VerifyLinear should reject tampered statement")
 	}
@@ -98,12 +86,8 @@ func TestLinearRejectTamperedStatement(t *testing.T) {
 func TestLinearRejectWrongWitness(t *testing.T) {
 	params := DefaultParams()
 	stmt, _ := makeValidInstance(params)
-
-	// Create a different witness that doesn't satisfy A·s = t
-	wrongS := sampler.SampleTernaryVec(params.L, rand.Reader)
-	wrongWit := &Witness{S: wrongS}
-
-	_, err := ProveLinear(params, stmt, wrongWit, rand.Reader)
+	wrongS := sampler.SampleTernaryVec(params.Ring, params.L, rand.Reader)
+	_, err := ProveLinear(params, stmt, &Witness{S: wrongS}, rand.Reader)
 	if err == nil {
 		t.Fatal("ProveLinear should fail with invalid witness")
 	}
@@ -111,17 +95,12 @@ func TestLinearRejectWrongWitness(t *testing.T) {
 
 func TestLinearRejectOversizedWitness(t *testing.T) {
 	params := DefaultParams()
-	A := sampler.SampleUniformMat(params.K, params.L, rand.Reader)
-
-	// Create a witness with ||s||_∞ > β
-	s := ring.NewPolyVec(params.L)
+	r := params.Ring
+	A := sampler.SampleUniformMat(r, params.K, params.L, rand.Reader)
+	s := r.NewPolyVec(params.L)
 	s[0][0] = params.Beta + 1
-	target := ring.MatVecMul(A, s)
-
-	stmt := &Statement{A: A, T: target}
-	wit := &Witness{S: s}
-
-	_, err := ProveLinear(params, stmt, wit, rand.Reader)
+	target := r.MatVecMul(A, s)
+	_, err := ProveLinear(params, &Statement{A: A, T: target}, &Witness{S: s}, rand.Reader)
 	if err == nil {
 		t.Fatal("ProveLinear should reject witness exceeding norm bound")
 	}
@@ -130,25 +109,20 @@ func TestLinearRejectOversizedWitness(t *testing.T) {
 func TestLinearNormBoundEnforced(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
 	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
 	if err != nil {
-		t.Fatalf("ProveLinear failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// The proof's z should respect the norm bound
-	if ring.VecInfNorm(proof.Z) > params.BoundZ {
-		t.Errorf("Proof z norm %d exceeds BoundZ %d", ring.VecInfNorm(proof.Z), params.BoundZ)
+	if params.Ring.VecInfNorm(proof.Z) > params.BoundZ {
+		t.Errorf("Proof z norm %d exceeds BoundZ %d", params.Ring.VecInfNorm(proof.Z), params.BoundZ)
 	}
 }
 
 func TestLinearDifferentParams(t *testing.T) {
-	// Test with different parameter sets
 	paramSets := []*Params{
-		{K: 2, L: 3, Kappa: 40, Beta: 1, Sigma: 200, BoundZ: 800, MaxAttempts: 1000},
-		{K: 6, L: 8, Kappa: 60, Beta: 1, Sigma: 400, BoundZ: 1600, MaxAttempts: 1000},
+		{Ring: ring.Dilithium(), K: 2, L: 3, Kappa: 40, Beta: 1, Sigma: 200, BoundZ: 800, MaxAttempts: 1000},
+		{Ring: ring.Dilithium(), K: 6, L: 8, Kappa: 60, Beta: 1, Sigma: 400, BoundZ: 1600, MaxAttempts: 1000},
 	}
-
 	for i, params := range paramSets {
 		stmt, wit := makeValidInstance(params)
 		proof, err := ProveLinear(params, stmt, wit, rand.Reader)
@@ -161,67 +135,97 @@ func TestLinearDifferentParams(t *testing.T) {
 	}
 }
 
+// --- Tests with q=7933, d=512 (no NTT, Karatsuba multiplication) ---
+
+func smallRingParams() *Params {
+	r, _ := ring.New(512, 7933)
+	return &Params{
+		Ring:        r,
+		K:           3,
+		L:           4,
+		Kappa:       40,
+		Beta:        1,
+		Sigma:       200,
+		BoundZ:      800,
+		MaxAttempts: 1000,
+	}
+}
+
+func TestLinearProveVerifySmallRing(t *testing.T) {
+	params := smallRingParams()
+	stmt, wit := makeValidInstance(params)
+	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
+	if err != nil {
+		t.Fatalf("ProveLinear (q=7933 d=512) failed: %v", err)
+	}
+	if !VerifyLinear(params, stmt, proof) {
+		t.Fatal("VerifyLinear (q=7933 d=512) returned false")
+	}
+}
+
+func TestLinearRejectTamperedSmallRing(t *testing.T) {
+	params := smallRingParams()
+	stmt, wit := makeValidInstance(params)
+	proof, err := ProveLinear(params, stmt, wit, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof.Z[0][0] = (proof.Z[0][0] + 1) % params.Ring.Q
+	if VerifyLinear(params, stmt, proof) {
+		t.Fatal("VerifyLinear (q=7933) should reject tampered z")
+	}
+}
+
+func TestLinearMultipleSmallRing(t *testing.T) {
+	params := smallRingParams()
+	for trial := 0; trial < 5; trial++ {
+		stmt, wit := makeValidInstance(params)
+		proof, err := ProveLinear(params, stmt, wit, rand.Reader)
+		if err != nil {
+			t.Fatalf("Trial %d: %v", trial, err)
+		}
+		if !VerifyLinear(params, stmt, proof) {
+			t.Fatalf("Trial %d: verification failed", trial)
+		}
+	}
+}
+
 // --- Range Proof Tests ---
 
 func TestRangeProveVerify(t *testing.T) {
 	params := DefaultParams()
 	stmt, wit := makeValidInstance(params)
-
-	rangeStmt := &RangeStatement{
-		Statement: *stmt,
-		Beta:      params.Beta,
-	}
-
+	rangeStmt := &RangeStatement{Statement: *stmt, Beta: params.Beta}
 	proof, err := ProveRange(params, rangeStmt, wit, rand.Reader)
 	if err != nil {
 		t.Fatalf("ProveRange failed: %v", err)
 	}
-
 	if !VerifyRange(params, rangeStmt, proof) {
 		t.Fatal("VerifyRange returned false for valid proof")
 	}
 }
 
 func TestRangeProveVerifyLargerBeta(t *testing.T) {
-	// Test with β=3 (coefficients in [-3, 3])
-	params := &Params{
-		K:           3,
-		L:           4,
-		Kappa:       40,
-		Beta:        3,
-		Sigma:       350,
-		BoundZ:      1400,
-		MaxAttempts: 1000,
-	}
+	r := ring.Dilithium()
+	params := &Params{Ring: r, K: 3, L: 4, Kappa: 40, Beta: 3, Sigma: 350, BoundZ: 1400, MaxAttempts: 1000}
 
-	A := sampler.SampleUniformMat(params.K, params.L, rand.Reader)
-	// Create witness with small coefficients in [-3, 3]
-	s := ring.NewPolyVec(params.L)
+	A := sampler.SampleUniformMat(r, params.K, params.L, rand.Reader)
+	s := r.NewPolyVec(params.L)
 	for i := range s {
-		for j := 0; j < ring.N; j++ {
-			// Use values in {-3, -2, -1, 0, 1, 2, 3}
+		for j := 0; j < r.N; j++ {
 			var buf [1]byte
-			for {
-				rand.Read(buf[:])
-				v := int64(buf[0] % 7)
-				s[i][j] = (v - 3 + ring.Q) % ring.Q
-				break
-			}
+			rand.Read(buf[:])
+			v := int64(buf[0]%7) - 3
+			s[i][j] = (v + r.Q) % r.Q
 		}
 	}
-	target := ring.MatVecMul(A, s)
+	target := r.MatVecMul(A, s)
 
-	stmt := &RangeStatement{
-		Statement: Statement{A: A, T: target},
-		Beta:      3,
-	}
-	wit := &Witness{S: s}
-
-	proof, err := ProveRange(params, stmt, wit, rand.Reader)
+	stmt := &RangeStatement{Statement: Statement{A: A, T: target}, Beta: 3}
+	proof, err := ProveRange(params, stmt, &Witness{S: s}, rand.Reader)
 	if err != nil {
 		t.Fatalf("ProveRange failed: %v", err)
 	}
-
 	if !VerifyRange(params, stmt, proof) {
 		t.Fatal("VerifyRange returned false for valid proof")
 	}
@@ -231,19 +235,15 @@ func TestRangeProveVerifyLargerBeta(t *testing.T) {
 
 func TestComposeProveVerify(t *testing.T) {
 	params := DefaultParams()
-
-	numProofs := 3
-	stmts := make([]*Statement, numProofs)
-	wits := make([]*Witness, numProofs)
-	for i := 0; i < numProofs; i++ {
+	stmts := make([]*Statement, 3)
+	wits := make([]*Witness, 3)
+	for i := 0; i < 3; i++ {
 		stmts[i], wits[i] = makeValidInstance(params)
 	}
-
 	proof, err := ComposeProofs(params, stmts, wits, rand.Reader)
 	if err != nil {
-		t.Fatalf("ComposeProofs failed: %v", err)
+		t.Fatal(err)
 	}
-
 	if !VerifyComposed(params, stmts, proof) {
 		t.Fatal("VerifyComposed returned false for valid composed proof")
 	}
@@ -251,20 +251,16 @@ func TestComposeProveVerify(t *testing.T) {
 
 func TestComposeRejectTampered(t *testing.T) {
 	params := DefaultParams()
-
 	stmts := make([]*Statement, 2)
 	wits := make([]*Witness, 2)
 	for i := 0; i < 2; i++ {
 		stmts[i], wits[i] = makeValidInstance(params)
 	}
-
 	proof, err := ComposeProofs(params, stmts, wits, rand.Reader)
 	if err != nil {
-		t.Fatalf("ComposeProofs failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Tamper with one sub-proof's z
-	proof.Proofs[0].Z[0][0] = (proof.Proofs[0].Z[0][0] + 1) % ring.Q
+	proof.Proofs[0].Z[0][0] = (proof.Proofs[0].Z[0][0] + 1) % params.Ring.Q
 	if VerifyComposed(params, stmts, proof) {
 		t.Fatal("VerifyComposed should reject tampered sub-proof")
 	}
@@ -272,19 +268,15 @@ func TestComposeRejectTampered(t *testing.T) {
 
 func TestComposeRejectSwappedStatements(t *testing.T) {
 	params := DefaultParams()
-
 	stmts := make([]*Statement, 2)
 	wits := make([]*Witness, 2)
 	for i := 0; i < 2; i++ {
 		stmts[i], wits[i] = makeValidInstance(params)
 	}
-
 	proof, err := ComposeProofs(params, stmts, wits, rand.Reader)
 	if err != nil {
-		t.Fatalf("ComposeProofs failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Swap statements
 	stmts[0], stmts[1] = stmts[1], stmts[0]
 	if VerifyComposed(params, stmts, proof) {
 		t.Fatal("VerifyComposed should reject swapped statements")
@@ -293,22 +285,34 @@ func TestComposeRejectSwappedStatements(t *testing.T) {
 
 func TestComposeRejectTamperedSeed(t *testing.T) {
 	params := DefaultParams()
-
 	stmts := make([]*Statement, 2)
 	wits := make([]*Witness, 2)
 	for i := 0; i < 2; i++ {
 		stmts[i], wits[i] = makeValidInstance(params)
 	}
-
 	proof, err := ComposeProofs(params, stmts, wits, rand.Reader)
 	if err != nil {
-		t.Fatalf("ComposeProofs failed: %v", err)
+		t.Fatal(err)
 	}
-
-	// Tamper with transcript seed
 	proof.TranscriptSeed[0] ^= 0xFF
 	if VerifyComposed(params, stmts, proof) {
 		t.Fatal("VerifyComposed should reject tampered transcript seed")
+	}
+}
+
+func TestComposeSmallRing(t *testing.T) {
+	params := smallRingParams()
+	stmts := make([]*Statement, 2)
+	wits := make([]*Witness, 2)
+	for i := 0; i < 2; i++ {
+		stmts[i], wits[i] = makeValidInstance(params)
+	}
+	proof, err := ComposeProofs(params, stmts, wits, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !VerifyComposed(params, stmts, proof) {
+		t.Fatal("VerifyComposed (q=7933 d=512) returned false")
 	}
 }
 
@@ -330,6 +334,15 @@ func BenchmarkVerifyLinear(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		VerifyLinear(params, stmt, proof)
+	}
+}
+
+func BenchmarkProveLinearSmallRing(b *testing.B) {
+	params := smallRingParams()
+	stmt, wit := makeValidInstance(params)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ProveLinear(params, stmt, wit, rand.Reader)
 	}
 }
 

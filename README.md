@@ -9,7 +9,8 @@ The framework proves knowledge of short vectors satisfying linear relations over
 
 ## Features
 
-- **Ring arithmetic** over R_q = Z_q[X]/(X^256+1) with NTT-accelerated polynomial multiplication
+- **Configurable ring** R_q = Z_q[X]/(X^N+1) — any power-of-2 degree N and prime Q
+- **NTT or Karatsuba** — automatic NTT when Q ≡ 1 (mod 2N), Karatsuba fallback otherwise
 - **BDLOP commitment scheme** — additively homomorphic, with scalar multiplication support
 - **Linear-relation proofs** — prove knowledge of short s such that A·s ≡ t (mod q)
 - **Range proofs** — prove witness coefficients lie in [-β, β] via binary decomposition
@@ -37,17 +38,17 @@ import (
     "fmt"
 
     "github.com/KarpelesLab/lnp22/nizk"
-    "github.com/KarpelesLab/lnp22/ring"
     "github.com/KarpelesLab/lnp22/sampler"
 )
 
 func main() {
-    params := nizk.DefaultParams() // K=4, L=5, κ=60, β=1, σ=350
+    params := nizk.DefaultParams() // Dilithium ring (N=256, Q=8380417)
 
     // Generate a random statement: public matrix A, ternary secret s, target t = A·s
-    A := sampler.SampleUniformMat(params.K, params.L, rand.Reader)
-    s := sampler.SampleTernaryVec(params.L, rand.Reader)
-    t := ring.MatVecMul(A, s)
+    r := params.Ring
+    A := sampler.SampleUniformMat(r, params.K, params.L, rand.Reader)
+    s := sampler.SampleTernaryVec(r, params.L, rand.Reader)
+    t := r.MatVecMul(A, s)
 
     stmt := &nizk.Statement{A: A, T: t}
     wit := &nizk.Witness{S: s}
@@ -79,7 +80,17 @@ Default parameters target 128-bit security:
 | σ | 350 | Gaussian standard deviation for masking |
 | B_z | 1400 | Response infinity norm bound |
 
-Parameters are configurable via the `nizk.Params` struct. The `Validate()` method checks consistency (e.g., σ ≥ 2κβ for rejection sampling convergence).
+Parameters are fully configurable. To use a different ring (e.g., Q=7933, N=512):
+
+```go
+r, _ := ring.New(512, 7933) // Karatsuba multiplication (no NTT for this Q)
+params := &nizk.Params{
+    Ring: r, K: 3, L: 4, Kappa: 40, Beta: 1,
+    Sigma: 200, BoundZ: 800, MaxAttempts: 1000,
+}
+```
+
+The `Validate()` method checks consistency (e.g., σ ≥ 2κβ for rejection sampling convergence). NTT is enabled automatically when Q ≡ 1 (mod 2N); otherwise Karatsuba multiplication is used.
 
 ## Protocol Overview
 
@@ -136,11 +147,12 @@ go test ./...
 go test ./... -bench=. -benchtime=1s
 ```
 
-47 tests covering:
-- Ring arithmetic correctness (NTT roundtrip, naive multiplication equivalence, ring axioms, X^N ≡ -1)
-- Sampling distributions (Gaussian mean/variance/tail bounds, uniform range, ternary balance, challenge determinism)
-- Commitment scheme (open/verify roundtrip, homomorphic properties, tampering detection)
-- NIZK proofs (prove/verify roundtrips, rejection of tampered proofs/statements/seeds, norm bound enforcement, cross-parameter-set validation)
+73 tests covering:
+- Ring arithmetic — NTT roundtrip, Karatsuba correctness, naive equivalence, ring axioms, X^N ≡ -1
+- Multiple ring configurations — Dilithium (N=256, Q=8380417) and Q=7933/N=512
+- Sampling distributions — Gaussian mean/variance/tail bounds, uniform range, ternary balance, challenge determinism
+- Commitment scheme — open/verify roundtrip, homomorphic properties, tampering detection
+- NIZK proofs — prove/verify roundtrips, rejection of tampered proofs/statements/seeds, norm bound enforcement, cross-parameter-set and cross-ring validation
 
 ## References
 

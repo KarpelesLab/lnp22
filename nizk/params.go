@@ -17,21 +17,22 @@ import (
 
 // Params holds the proof system parameters.
 type Params struct {
-	K      int     // number of constraint equations (rows in A)
-	L      int     // number of witness polynomials (columns in A)
-	Kappa  int     // challenge weight: number of non-zero coefficients in {-1,+1}
-	Beta   int64   // witness infinity norm bound: ||s||_∞ ≤ β
-	Sigma  float64 // Gaussian std dev for masking vectors
-	BoundZ int64   // response infinity norm bound: ||z||_∞ ≤ B_z
+	Ring   *ring.Ring // underlying polynomial ring
+	K      int        // number of constraint equations (rows in A)
+	L      int        // number of witness polynomials (columns in A)
+	Kappa  int        // challenge weight: number of non-zero coefficients in {-1,+1}
+	Beta   int64      // witness infinity norm bound: ||s||_∞ ≤ β
+	Sigma  float64    // Gaussian std dev for masking vectors
+	BoundZ int64      // response infinity norm bound: ||z||_∞ ≤ B_z
 
 	// MaxAttempts limits the rejection sampling loop. 0 means no limit.
 	MaxAttempts int
 }
 
-// DefaultParams returns parameters suitable for proving knowledge of a ternary
-// secret (β=1) in a 4×5 module with 128-bit security.
+// DefaultParams returns parameters suitable for the Dilithium ring (N=256, Q=8380417).
 func DefaultParams() *Params {
 	return &Params{
+		Ring:        ring.Dilithium(),
 		K:           4,
 		L:           5,
 		Kappa:       60,
@@ -44,14 +45,17 @@ func DefaultParams() *Params {
 
 // Validate checks that the parameters are self-consistent.
 func (p *Params) Validate() error {
+	if p.Ring == nil {
+		return errors.New("nizk: Ring must not be nil")
+	}
 	if p.K <= 0 {
 		return errors.New("nizk: K must be positive")
 	}
 	if p.L <= 0 {
 		return errors.New("nizk: L must be positive")
 	}
-	if p.Kappa <= 0 || p.Kappa > ring.N {
-		return fmt.Errorf("nizk: Kappa must be in [1, %d]", ring.N)
+	if p.Kappa <= 0 || p.Kappa > p.Ring.N {
+		return fmt.Errorf("nizk: Kappa must be in [1, %d]", p.Ring.N)
 	}
 	if p.Beta <= 0 {
 		return errors.New("nizk: Beta must be positive")
@@ -62,10 +66,8 @@ func (p *Params) Validate() error {
 	if p.BoundZ <= 0 {
 		return errors.New("nizk: BoundZ must be positive")
 	}
-	// Sigma should be large enough relative to Kappa*Beta for rejection sampling
-	// to succeed with reasonable probability.
 	if p.Sigma < 2*float64(p.Kappa)*float64(p.Beta) {
-		return fmt.Errorf("nizk: Sigma=%f too small relative to Kappa*Beta=%d (need Sigma ≥ 2*κ*β)",
+		return fmt.Errorf("nizk: Sigma=%f too small relative to Kappa*Beta=%d",
 			p.Sigma, int64(p.Kappa)*p.Beta)
 	}
 	return nil

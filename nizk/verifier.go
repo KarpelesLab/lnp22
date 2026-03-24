@@ -1,15 +1,6 @@
 package nizk
 
-import (
-	"github.com/KarpelesLab/lnp22/ring"
-)
-
 // VerifyLinear checks a linear-relation NIZK proof.
-//
-// Verification:
-//  1. Re-derive challenge c = H(A, t, w)
-//  2. Check ||z||_∞ ≤ B_z
-//  3. Check A·z ≡ c·t + w (mod q)
 func VerifyLinear(params *Params, stmt *Statement, proof *LinearProof) bool {
 	if err := params.Validate(); err != nil {
 		return false
@@ -21,80 +12,72 @@ func VerifyLinear(params *Params, stmt *Statement, proof *LinearProof) bool {
 		return false
 	}
 
-	// Check norm bound on z
-	if ring.VecInfNorm(proof.Z) > params.BoundZ {
+	r := params.Ring
+
+	if r.VecInfNorm(proof.Z) > params.BoundZ {
 		return false
 	}
 
-	// Re-derive challenge
 	c := HashToChallenge(params, stmt.A, stmt.T, proof.W)
+	az := r.MatVecMul(stmt.A, proof.Z)
+	ct := r.VecScalarMul(stmt.T, c)
+	expected := r.VecAdd(ct, proof.W)
 
-	// Check A·z = c·t + w
-	az := ring.MatVecMul(stmt.A, proof.Z)
-
-	// Compute c·t + w
-	ct := ring.VecScalarMul(stmt.T, c)
-	expected := ring.VecAdd(ct, proof.W)
-
-	return ring.VecEqual(az, expected)
+	return r.VecEqual(az, expected)
 }
 
-// VerifyRange checks a range proof: that the witness coefficients lie in [-β, β].
+// VerifyRange checks a range proof.
 func VerifyRange(params *Params, stmt *RangeStatement, proof *RangeProof) bool {
-	// Verify the main linear part
 	if !VerifyLinear(params, &stmt.Statement, &proof.LinearPart) {
 		return false
 	}
 
-	// Verify each bit proof (binary constraint: b*(1-b) = 0)
 	bitParams := bitProofParams(params)
 	for _, bp := range proof.BitProofs {
-		// The bit proof statement is embedded; we verify via the linear check
 		if len(bp.Z) != bitParams.L || len(bp.W) != bitParams.K {
 			return false
 		}
-		if ring.VecInfNorm(bp.Z) > bitParams.BoundZ {
+		if params.Ring.VecInfNorm(bp.Z) > bitParams.BoundZ {
 			return false
 		}
 	}
 
-	// Verify reconstruction proof
 	reconParams := reconProofParams(params)
 	if len(proof.ReconProof.Z) != reconParams.L || len(proof.ReconProof.W) != reconParams.K {
 		return false
 	}
-	if ring.VecInfNorm(proof.ReconProof.Z) > reconParams.BoundZ {
+	if params.Ring.VecInfNorm(proof.ReconProof.Z) > reconParams.BoundZ {
 		return false
 	}
 
 	return true
 }
 
-// VerifyComposed checks a composed proof (multiple sub-proofs bound together).
+// VerifyComposed checks a composed proof.
 func VerifyComposed(params *Params, stmts []*Statement, proof *ComposedProof) bool {
 	if len(stmts) != len(proof.Proofs) {
 		return false
 	}
 
+	r := params.Ring
+
 	for i, subProof := range proof.Proofs {
-		// Derive challenge using the transcript seed for binding
 		if len(subProof.Z) != params.L || len(subProof.W) != params.K {
 			return false
 		}
-		if ring.VecInfNorm(subProof.Z) > params.BoundZ {
+		if r.VecInfNorm(subProof.Z) > params.BoundZ {
 			return false
 		}
 
-		// Re-derive challenge with composed tag
 		tag := composeTag(proof.TranscriptSeed, i)
-		seed := hashTranscriptWithTag(tag, stmts[i].A, stmts[i].T, subProof.W)
+		seed := hashTranscriptWithTag(r, tag, stmts[i].A, stmts[i].T, subProof.W)
 		c := hashSeedToChallenge(params, seed)
 
-		az := ring.MatVecMul(stmts[i].A, subProof.Z)
-		ct := ring.VecScalarMul(stmts[i].T, c)
-		expected := ring.VecAdd(ct, subProof.W)
+		az := r.MatVecMul(stmts[i].A, subProof.Z)
+		ct := r.VecScalarMul(stmts[i].T, c)
+		expected := r.VecAdd(ct, subProof.W)
 
-		if !ring.VecEqual(az, expected) {
+		if !r.VecEqual(az, expected) {
 			return false
 		}
 	}

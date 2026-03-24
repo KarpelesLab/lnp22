@@ -8,61 +8,65 @@ import (
 )
 
 // SampleUniformPoly samples a polynomial with coefficients uniform in [0, Q).
-func SampleUniformPoly(rng io.Reader) *ring.Poly {
-	var p ring.Poly
-	var buf [4]byte
-	for i := 0; i < ring.N; i++ {
-		// Rejection sampling to get uniform in [0, Q)
+func SampleUniformPoly(r *ring.Ring, rng io.Reader) ring.Poly {
+	p := r.NewPoly()
+	var buf [8]byte
+
+	// Find the smallest bitmask >= Q
+	mask := int64(1)
+	for mask < r.Q {
+		mask <<= 1
+	}
+	mask--
+
+	for i := 0; i < r.N; i++ {
 		for {
 			if _, err := io.ReadFull(rng, buf[:]); err != nil {
 				panic("sampler: failed to read randomness: " + err.Error())
 			}
-			// Use 23 bits (since Q < 2^23)
-			v := int64(binary.LittleEndian.Uint32(buf[:]) & 0x7FFFFF)
-			if v < ring.Q {
+			v := int64(binary.LittleEndian.Uint64(buf[:])) & mask
+			if v >= 0 && v < r.Q {
 				p[i] = v
 				break
 			}
 		}
 	}
-	return &p
+	return p
 }
 
 // SampleUniformVec samples a vector of l uniform polynomials.
-func SampleUniformVec(l int, rng io.Reader) ring.PolyVec {
-	v := ring.NewPolyVec(l)
+func SampleUniformVec(r *ring.Ring, l int, rng io.Reader) ring.PolyVec {
+	v := r.NewPolyVec(l)
 	for i := 0; i < l; i++ {
-		v[i] = *SampleUniformPoly(rng)
+		v[i] = SampleUniformPoly(r, rng)
 	}
 	return v
 }
 
 // SampleUniformMat samples a k×l matrix of uniform polynomials.
-func SampleUniformMat(k, l int, rng io.Reader) ring.PolyMat {
-	m := ring.NewPolyMat(k, l)
+func SampleUniformMat(r *ring.Ring, k, l int, rng io.Reader) ring.PolyMat {
+	m := r.NewPolyMat(k, l)
 	for i := 0; i < k; i++ {
 		for j := 0; j < l; j++ {
-			m[i][j] = *SampleUniformPoly(rng)
+			m[i][j] = SampleUniformPoly(r, rng)
 		}
 	}
 	return m
 }
 
 // SampleTernaryPoly samples a polynomial with coefficients uniform in {-1, 0, 1}.
-func SampleTernaryPoly(rng io.Reader) *ring.Poly {
-	var p ring.Poly
+func SampleTernaryPoly(r *ring.Ring, rng io.Reader) ring.Poly {
+	p := r.NewPoly()
 	var buf [1]byte
-	for i := 0; i < ring.N; i++ {
-		// Rejection sample to get uniform in {0, 1, 2}
+	for i := 0; i < r.N; i++ {
 		for {
 			if _, err := io.ReadFull(rng, buf[:]); err != nil {
 				panic("sampler: failed to read randomness: " + err.Error())
 			}
-			v := buf[0]
-			if v < 252 { // 252 = 84*3, largest multiple of 3 < 256
-				switch v % 3 {
+			if buf[0] < 252 {
+				switch buf[0] % 3 {
 				case 0:
-					p[i] = ring.Q - 1 // -1 mod Q
+					p[i] = r.Q - 1
 				case 1:
 					p[i] = 0
 				case 2:
@@ -72,14 +76,14 @@ func SampleTernaryPoly(rng io.Reader) *ring.Poly {
 			}
 		}
 	}
-	return &p
+	return p
 }
 
 // SampleTernaryVec samples a vector of l ternary polynomials.
-func SampleTernaryVec(l int, rng io.Reader) ring.PolyVec {
-	v := ring.NewPolyVec(l)
+func SampleTernaryVec(r *ring.Ring, l int, rng io.Reader) ring.PolyVec {
+	v := r.NewPolyVec(l)
 	for i := 0; i < l; i++ {
-		v[i] = *SampleTernaryPoly(rng)
+		v[i] = SampleTernaryPoly(r, rng)
 	}
 	return v
 }

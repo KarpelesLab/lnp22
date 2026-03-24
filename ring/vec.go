@@ -7,68 +7,71 @@ type PolyVec []Poly
 type PolyMat []PolyVec
 
 // NewPolyVec creates a zero vector of n polynomials.
-func NewPolyVec(n int) PolyVec {
-	return make(PolyVec, n)
+func (r *Ring) NewPolyVec(n int) PolyVec {
+	v := make(PolyVec, n)
+	for i := range v {
+		v[i] = r.NewPoly()
+	}
+	return v
 }
 
 // NewPolyMat creates a zero k×l matrix of polynomials.
-func NewPolyMat(k, l int) PolyMat {
+func (r *Ring) NewPolyMat(k, l int) PolyMat {
 	m := make(PolyMat, k)
 	for i := range m {
-		m[i] = NewPolyVec(l)
+		m[i] = r.NewPolyVec(l)
 	}
 	return m
 }
 
 // VecAdd returns a + b (component-wise polynomial addition).
-func VecAdd(a, b PolyVec) PolyVec {
+func (r *Ring) VecAdd(a, b PolyVec) PolyVec {
 	if len(a) != len(b) {
 		panic("ring: vector length mismatch")
 	}
-	c := NewPolyVec(len(a))
+	c := r.NewPolyVec(len(a))
 	for i := range a {
-		c[i] = *Add(&a[i], &b[i])
+		c[i] = r.Add(a[i], b[i])
 	}
 	return c
 }
 
 // VecSub returns a - b (component-wise polynomial subtraction).
-func VecSub(a, b PolyVec) PolyVec {
+func (r *Ring) VecSub(a, b PolyVec) PolyVec {
 	if len(a) != len(b) {
 		panic("ring: vector length mismatch")
 	}
-	c := NewPolyVec(len(a))
+	c := r.NewPolyVec(len(a))
 	for i := range a {
-		c[i] = *Sub(&a[i], &b[i])
+		c[i] = r.Sub(a[i], b[i])
 	}
 	return c
 }
 
 // VecScalarMul returns c * a for a scalar polynomial c and vector a.
-func VecScalarMul(a PolyVec, c *Poly) PolyVec {
-	out := NewPolyVec(len(a))
+func (r *Ring) VecScalarMul(a PolyVec, c Poly) PolyVec {
+	out := r.NewPolyVec(len(a))
 	for i := range a {
-		out[i] = *Mul(c, &a[i])
+		out[i] = r.Mul(c, a[i])
 	}
 	return out
 }
 
 // InnerProduct computes ⟨a, b⟩ = Σ a_i * b_i in R_q.
-func InnerProduct(a, b PolyVec) *Poly {
+func (r *Ring) InnerProduct(a, b PolyVec) Poly {
 	if len(a) != len(b) {
 		panic("ring: vector length mismatch")
 	}
-	result := Zero()
+	result := r.NewPoly()
 	for i := range a {
-		prod := Mul(&a[i], &b[i])
-		result = Add(result, prod)
+		prod := r.Mul(a[i], b[i])
+		result = r.Add(result, prod)
 	}
 	return result
 }
 
 // MatVecMul computes A * s where A is a k×l matrix and s is an l-vector.
-// Returns a k-vector.
-func MatVecMul(A PolyMat, s PolyVec) PolyVec {
+func (r *Ring) MatVecMul(A PolyMat, s PolyVec) PolyVec {
 	k := len(A)
 	if k == 0 {
 		return nil
@@ -77,18 +80,18 @@ func MatVecMul(A PolyMat, s PolyVec) PolyVec {
 	if len(s) != l {
 		panic("ring: dimension mismatch in MatVecMul")
 	}
-	result := NewPolyVec(k)
+	result := r.NewPolyVec(k)
 	for i := 0; i < k; i++ {
-		result[i] = *InnerProduct(A[i], s)
+		result[i] = r.InnerProduct(A[i], s)
 	}
 	return result
 }
 
 // VecInfNorm returns the maximum infinity norm across all polynomials in the vector.
-func VecInfNorm(v PolyVec) int64 {
+func (r *Ring) VecInfNorm(v PolyVec) int64 {
 	maxN := int64(0)
 	for i := range v {
-		n := InfNorm(&v[i])
+		n := r.InfNorm(v[i])
 		if n > maxN {
 			maxN = n
 		}
@@ -97,12 +100,12 @@ func VecInfNorm(v PolyVec) int64 {
 }
 
 // VecEqual returns true if a and b represent the same polynomial vector.
-func VecEqual(a, b PolyVec) bool {
+func (r *Ring) VecEqual(a, b PolyVec) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if !Equal(&a[i], &b[i]) {
+		if !r.Equal(a[i], b[i]) {
 			return false
 		}
 	}
