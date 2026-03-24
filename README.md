@@ -1,5 +1,8 @@
 # LNP22 — Lattice-Based NIZK Framework in Go
 
+[![Tests](https://github.com/KarpelesLab/lnp22/actions/workflows/test.yml/badge.svg)](https://github.com/KarpelesLab/lnp22/actions/workflows/test.yml)
+[![Coverage Status](https://coveralls.io/repos/github/KarpelesLab/lnp22/badge.svg?branch=master)](https://coveralls.io/github/KarpelesLab/lnp22?branch=master)
+
 A self-contained Go implementation of the LNP22 non-interactive zero-knowledge proof system from [Lyubashevsky, Nguyen, and Plançon (CRYPTO 2022)](https://eprint.iacr.org/2022/284).
 
 The framework proves knowledge of short vectors satisfying linear relations over polynomial rings, with applications to range proofs and proof composition. No external cryptography dependencies beyond `golang.org/x/crypto/sha3` for SHAKE256.
