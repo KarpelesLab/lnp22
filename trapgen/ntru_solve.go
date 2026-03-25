@@ -89,7 +89,7 @@ func solveNTRUBase(f, g, q *big.Int) (ring.BigPoly, ring.BigPoly, error) {
 	scale := new(big.Int).Div(q, d)
 	G := make(ring.BigPoly, 1)
 	F := make(ring.BigPoly, 1)
-	G[0] = new(big.Int).Mul(u, scale)  // G = u * q/d
+	G[0] = new(big.Int).Mul(u, scale)                   // G = u * q/d
 	F[0] = new(big.Int).Neg(new(big.Int).Mul(v, scale)) // F = -(v * q/d), so fG - gF = f*u*q/d + g*v*q/d = q
 
 	return F, G, nil

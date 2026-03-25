@@ -22,10 +22,10 @@ import (
 type Params struct {
 	Ring *ring.BigRing // polynomial ring for both commitment and proof
 
-	K     int      // constraint equations (rows in A)
-	L     int      // witness polynomials (columns in A)
-	Kappa int      // challenge weight
-	Sigma float64  // Gaussian masking parameter
+	K      int      // constraint equations (rows in A)
+	L      int      // witness polynomials (columns in A)
+	Kappa  int      // challenge weight
+	Sigma  float64  // Gaussian masking parameter
 	BoundZ *big.Int // l-inf norm bound on response z
 
 	// L2 norm parameters
