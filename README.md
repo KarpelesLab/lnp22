@@ -2,6 +2,8 @@
 
 [![Tests](https://github.com/KarpelesLab/lnp22/actions/workflows/test.yml/badge.svg)](https://github.com/KarpelesLab/lnp22/actions/workflows/test.yml)
 [![Coverage Status](https://coveralls.io/repos/github/KarpelesLab/lnp22/badge.svg?branch=master)](https://coveralls.io/github/KarpelesLab/lnp22?branch=master)
+[![Go Reference](https://pkg.go.dev/badge/github.com/KarpelesLab/lnp22.svg)](https://pkg.go.dev/github.com/KarpelesLab/lnp22)
+[![Go Report Card](https://goreportcard.com/badge/github.com/KarpelesLab/lnp22)](https://goreportcard.com/report/github.com/KarpelesLab/lnp22)
 
 A self-contained Go implementation of the LNP22 non-interactive zero-knowledge proof system from [Lyubashevsky, Nguyen, and Plançon (CRYPTO 2022)](https://eprint.iacr.org/2022/284).
 
