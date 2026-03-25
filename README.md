@@ -16,16 +16,26 @@ The framework proves knowledge of short vectors satisfying linear relations over
 - **Range proofs** — prove witness coefficients lie in [-β, β] via binary decomposition
 - **Proof composition** — bind multiple sub-proofs under a single Fiat-Shamir transcript
 - **Discrete Gaussian sampling** via cumulative distribution tables
+- **152-bit modular arithmetic** — `big.Int`-based `BigRing`/`BigPoly` types for large moduli
+- **NTRU trapdoor generation** — TrapGen from DLP14 with gadget matrix toolkit
+- **Gaussian pre-image sampling** — SamplePre via the GPV framework
+- **Public key encryption** — NTRU-style PKE with rounding-based encoding/decoding
+- **Two-ring NIZK** — linear + quadratic relation proofs with ℓ₂-norm bounds
+- **Rounding function** ⌈·⌉_p — encode/decode between Z_p and Z_q
 - **Configurable parameters** — security level, module dimensions, norm bounds
 
 ## Packages
 
 ```
-ring/           Polynomial ring R_q = Z_q[X]/(X^N+1), NTT, vectors, matrices
-sampler/        Discrete Gaussian, uniform, ternary, and challenge sampling
+ring/           Polynomial ring R_q, NTT, Karatsuba — both int64 and big.Int types
+sampler/        Discrete Gaussian, uniform, ternary, challenge — int64 and big.Int
 commitment/     BDLOP lattice-based commitment scheme
-nizk/           LNP22 NIZK proof system (linear, range, composed)
-internal/       Modular arithmetic utilities
+nizk/           NIZK proof system (linear, range, composed) — int64 ring
+tworing/        Two-ring NIZK (linear + quadratic + ℓ₂-norm) — big.Int ring
+trapgen/        NTRU trapdoor generation (TrapGen from DLP14)
+preimage/       Gaussian pre-image sampling (SamplePre, GPV framework)
+pke/            NTRU-style public key encryption with rounding
+internal/       Modular arithmetic (int64 + big.Int) and rounding
 ```
 
 ## Quick Start
@@ -147,12 +157,17 @@ go test ./...
 go test ./... -bench=. -benchtime=1s
 ```
 
-73 tests covering:
+148 tests across 10 packages covering:
 - Ring arithmetic — NTT roundtrip, Karatsuba correctness, naive equivalence, ring axioms, X^N ≡ -1
 - Multiple ring configurations — Dilithium (N=256, Q=8380417) and Q=7933/N=512
 - Sampling distributions — Gaussian mean/variance/tail bounds, uniform range, ternary balance, challenge determinism
 - Commitment scheme — open/verify roundtrip, homomorphic properties, tampering detection
 - NIZK proofs — prove/verify roundtrips, rejection of tampered proofs/statements/seeds, norm bound enforcement, cross-parameter-set and cross-ring validation
+- 152-bit big.Int ring — NTT roundtrip, Karatsuba, ring axioms at full 152-bit modulus
+- TrapGen — NTRU key generation, gadget decomposition roundtrip, polynomial inverse
+- Pre-image sampling — dimension checks, shortness bounds, multiple targets
+- PKE — encode/decode roundtrip, encrypt/decrypt, out-of-range rejection
+- Two-ring NIZK — linear, quadratic, ℓ₂-norm proofs, tamper rejection
 
 ## References
 
